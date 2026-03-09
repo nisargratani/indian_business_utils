@@ -4,6 +4,13 @@ class PanValidator {
 
   /// Returns true if PAN is valid.
   static bool isValid(String pan) {
-    return _regex.hasMatch(pan);
+    final normalizedPan = pan.toUpperCase().trim();
+    if (!_regex.hasMatch(normalizedPan)) return false;
+
+    // 4th character represents status of the holder
+    const validStatus = 'CPHFATBLJG';
+    if (!validStatus.contains(normalizedPan[3])) return false;
+
+    return true;
   }
 }

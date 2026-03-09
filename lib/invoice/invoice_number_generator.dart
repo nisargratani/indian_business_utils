@@ -5,9 +5,10 @@ class InvoiceNumberGenerator {
   static String generate({
     required int sequence,
     String prefix = "INV",
+    int padding = 4,
   }) {
     final fy = FinancialYearHelper.currentFY();
 
-    return "$prefix/$fy/${sequence.toString().padLeft(4, '0')}";
+    return "$prefix/$fy/${sequence.toString().padLeft(padding, '0')}";
   }
 }
