@@ -1,8 +1,8 @@
 ## 0.0.1
 
-* **GST Utilities**: Added `GstCalculator`, `GstTypeDetector`, and `GstSlabHelper` for easy GST calculations and identification.
-* **Validators**: Comprehensive validation for Indian business identifiers: GSTIN, PAN, and HSN/SAC codes.
-* **Invoice Tools**: Added `InvoiceCalculator` for final amount processing and `InvoiceNumberGenerator` for serial number logic.
-* **Currency Formatting**: `IndianCurrencyFormatter` for localized Indian Rupee (₹) formatting.
-* **Financial Year**: `FinancialYearHelper` to determine and format Indian Financial Years.
+* **GST Utilities**: Added `GstCalculator` with rounding precision, `GstTypeDetector`, and `GstSlabHelper`.
+* **Validators**: Enhanced validation for GSTIN (checksum & state codes), PAN (status & normalization), and HSN/SAC codes.
+* **Currency Formatting**: Added `IndianCurrencyFormatter` with `formatToWords()` support (Lakhs/Crores) and symbol formatting.
+* **Financial Year**: Improved `FinancialYearHelper` to calculate FY for any given `DateTime`.
+* **Invoice Tools**: Added `InvoiceCalculator` and `InvoiceNumberGenerator` with custom padding support.
 * **Models**: Structured data models for `InvoiceResult` and `GstSplitResult`.
