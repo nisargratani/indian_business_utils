@@ -1,3 +1,7 @@
+## 0.0.2
+
+* Updated `intl` and `test` dependencies to latest versions.
+
 ## 0.0.1
 
 * **GST Utilities**: Added `GstCalculator` with rounding precision, `GstTypeDetector`, and `GstSlabHelper`.
