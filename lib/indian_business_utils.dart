@@ -1,4 +1,11 @@
-library indian_business_utils;
+/// Utilities for Indian billing, accounting and ERP apps: GST calculation,
+/// GSTIN/PAN/HSN validation, invoice totals and numbering, financial year
+/// helpers and Indian currency formatting.
+///
+/// ```dart
+/// import 'package:indian_business_utils/indian_business_utils.dart';
+/// ```
+library;
 
 export 'gst/gst_calculator.dart';
 export 'gst/gst_type.dart';
