@@ -1,16 +1,19 @@
-/// Validates Indian PAN numbers.
+/// Validates Indian PAN (Permanent Account Number) values.
 class PanValidator {
   static final _regex = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$');
 
-  /// Returns true if PAN is valid.
+  /// Valid holder-type codes for the 4th character: Company, Person, HUF,
+  /// Firm, AOP, Trust, BOI, Local authority, Artificial juridical person,
+  /// Government.
+  static const _validStatus = 'CPHFATBLJG';
+
+  /// Returns true if [pan] has a valid PAN format and holder-type code.
+  ///
+  /// Surrounding whitespace and lowercase letters are accepted.
   static bool isValid(String pan) {
     final normalizedPan = pan.toUpperCase().trim();
     if (!_regex.hasMatch(normalizedPan)) return false;
 
-    // 4th character represents status of the holder
-    const validStatus = 'CPHFATBLJG';
-    if (!validStatus.contains(normalizedPan[3])) return false;
-
-    return true;
+    return _validStatus.contains(normalizedPan[3]);
   }
 }
