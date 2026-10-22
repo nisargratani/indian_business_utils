@@ -29,24 +29,21 @@ import 'package:indian_business_utils/indian_business_utils.dart';
 ## Quick start: a complete invoice
 
 ```dart
-final invoice = InvoiceCalculator.calculate(
-  subtotal: 5000,
-  discount: 200,
-  gstRate: 18,
-);
-// invoice.taxableAmount == 4800.0, invoice.tax == 864.0, invoice.total == 5664.0
-
 final type = GstTypeDetector.detect(
   sellerGSTIN: '27AAPFU0939F1ZV', // Maharashtra
   buyerGSTIN: '27AAACR5055K1Z7',  // Maharashtra
 ); // GstType.intraState
 
-final gst = GstCalculator.splitGST(
-  amount: invoice.taxableAmount,
-  rate: 18,
+final invoice = InvoiceCalculator.calculate(
+  subtotal: 5000,
+  discount: 200,
+  gstRate: 18,
   type: type,
 );
-// gst.cgst == 432.0, gst.sgst == 432.0, gst.total == 864.0
+// invoice.taxableAmount == 4800.0, invoice.tax == 864.0, invoice.total == 5664.0
+
+final gst = invoice.gst!; // set because `type` was passed
+// gst.cgst == 432.0, gst.sgst == 432.0, gst.total == invoice.tax
 
 final number = InvoiceNumberGenerator.generate(
   sequence: 1,
@@ -56,6 +53,8 @@ final number = InvoiceNumberGenerator.generate(
 IndianCurrencyFormatter.format(invoice.total);        // '₹5,664.00'
 IndianCurrencyFormatter.formatToWords(invoice.total); // 'Five Thousand Six Hundred Sixty Four Only'
 ```
+
+Pass `type` to `calculate` so that the invoice tax is exactly the CGST + SGST (or IGST) you print. Without it, the tax is rounded at the full rate, as IGST, which can differ from CGST + SGST by one paisa.
 
 ## GST
 
@@ -100,6 +99,8 @@ GstTypeDetector.fromStateCodes(
 
 `detect` only compares the two-digit state codes. It throws an `ArgumentError` if a value does not start with one. Validate the full GSTIN with `GstinValidator` first.
 
+Supplies to an SEZ unit or developer, and exports, are inter-state under Section 7(5) of the IGST Act even when both parties are in the same state. A GSTIN does not show this, so use `GstType.interState` directly for them.
+
 ### GST slabs
 
 GST slabs changed on 22 September 2025 (12% and 28% removed, 40% added) and again on 1 February 2026 (tobacco and pan masala moved from 28% to 40%). Invoices for older supplies still use the old rates, so validation can be date-aware:
@@ -127,8 +128,8 @@ HsnValidator.isValidSAC('998311'); // true (6 digits starting with 99)
 HsnValidator.isValid('85171');     // false
 ```
 
-* All validators ignore surrounding whitespace, and the GSTIN and PAN validators accept lowercase. Store the normalized value (`value.trim().toUpperCase()`).
-* `GstinValidator` accepts PAN-based GSTINs with state codes 01–38 and 97. TDS/TCS, UIN, NRTP and OIDAR registrations are not supported.
+* All validators ignore surrounding whitespace, and the GSTIN and PAN validators accept lowercase. Only ASCII letters and digits are accepted, so look-alikes such as `ı` (dotless i) are rejected. Store the normalized value (`value.trim().toUpperCase()`).
+* `GstinValidator` accepts PAN-based GSTINs with state codes 01–38 and 97 whose embedded PAN (characters 3–12) passes `PanValidator`. TDS/TCS, UIN, NRTP and OIDAR registrations are not supported.
 * The validators check format only. They do not confirm that a number is registered or that an HSN code exists. Use the GST portal for that.
 
 ## Invoices
@@ -136,9 +137,18 @@ HsnValidator.isValid('85171');     // false
 ```dart
 final invoice = InvoiceCalculator.calculate(subtotal: 1000.55); // gstRate defaults to 18
 // invoice.tax == 180.1, invoice.total == 1180.65
+
+final intra = InvoiceCalculator.calculate(
+  subtotal: 100.05,
+  type: GstType.intraState,
+);
+// intra.gst == GstSplitResult(cgst: 9.0, sgst: 9.0), intra.tax == 18.0, intra.total == 118.05
+// Without `type`, the tax is rounded at the full rate: 18.01.
 ```
 
-`taxableAmount`, `tax` and `total` are rounded half-up to `precision` places (default `2`). An `ArgumentError` is thrown if a discount is negative or exceeds the subtotal, or if the rate is negative.
+`taxableAmount`, `tax` and `total` are rounded half-up to `precision` places (default `2`). With `type: GstType.intraState`, the tax is CGST + SGST, each rounded at half the rate as `splitGST` does; with `GstType.interState` or no `type`, it is rounded at the full rate. When `type` is passed, `invoice.gst` holds the split.
+
+An `ArgumentError` is thrown if the subtotal, discount or rate is negative, or if the discount exceeds the subtotal.
 
 ```dart
 InvoiceNumberGenerator.generate(sequence: 42, date: DateTime(2025, 6, 1));
@@ -177,7 +187,9 @@ IndianCurrencyFormatter.formatToWords(0.5);    // 'Fifty Paise Only'
 IndianCurrencyFormatter.formatToWords(-25);    // 'Minus Twenty Five Only'
 ```
 
-`formatToWords` rounds to the nearest paisa first. It throws an `ArgumentError` for NaN, infinity, or amounts of 10,00,000 crore (`1e13`) or more. Neither method reads or changes `Intl.defaultLocale`.
+Both methods round half-up to the nearest paisa first, decimal-safe, so they always show the same paise: `format(2.675)` is `'₹2.68'` and `formatToWords(2.675)` ends in `'Sixty Eight Paise Only'`.
+
+`format` throws an `ArgumentError` for `double` amounts of `IndianCurrencyFormatter.maxAmount` (2^63, about 9.2e18) or more, which `intl` cannot print correctly. `formatToWords` throws an `ArgumentError` for NaN, infinity, or amounts of 10,00,000 crore (`IndianCurrencyFormatter.maxAmountInWords`, `1e13`) or more. Neither method reads or changes `Intl.defaultLocale`.
 
 ## Notes
 

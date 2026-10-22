@@ -1,5 +1,21 @@
+import 'dart:math';
+
 import 'package:test/test.dart';
 import 'package:indian_business_utils/indian_business_utils.dart';
+
+const _gstinChars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/// Builds a GSTIN with a correct check character, using GSTN's published
+/// mod-36 algorithm independently of the package code.
+String buildGstin(String stateCode, String pan, {String entity = '1'}) {
+  final base = '$stateCode$pan${entity}Z';
+  var sum = 0;
+  for (var i = 0; i < 14; i++) {
+    final product = _gstinChars.indexOf(base[i]) * (i.isEven ? 1 : 2);
+    sum += product ~/ 36 + product % 36;
+  }
+  return '$base${_gstinChars[(36 - sum % 36) % 36]}';
+}
 
 void main() {
   group('PAN Validator', () {
@@ -21,6 +37,13 @@ void main() {
         expect(PanValidator.isValid('ABC${status}E1234F'), true,
             reason: status);
       }
+    });
+
+    // Regression: toUpperCase() maps 'ı' to 'I' and 'ſ' to 'S', so these
+    // passed the ASCII-only check.
+    test('rejects non-ASCII letters', () {
+      expect(PanValidator.isValid('ıBCPE1234F'), false);
+      expect(PanValidator.isValid('ABCPE1234ſ'), false);
     });
 
     test('Invalid PAN format', () {
@@ -61,6 +84,46 @@ void main() {
           .length;
       expect(validCount('97AAPFU0939F1Z'), 1);
       expect(validCount('99AAPFU0939F1Z'), 0);
+    });
+
+    test('buildGstin matches known GSTINs', () {
+      expect(buildGstin('27', 'AAPFU0939F'), '27AAPFU0939F1ZV');
+      expect(buildGstin('24', 'AAACC1206D'), '24AAACC1206D1ZM');
+    });
+
+    // Regression: toUpperCase() maps 'ı' to 'I' and 'ſ' to 'S', so these
+    // passed with a correct check character.
+    test('rejects non-ASCII letters', () {
+      final gstin = buildGstin('27', 'ISIPS1234K');
+      expect(GstinValidator.isValid(gstin), true);
+      expect(GstinValidator.isValid(gstin.replaceFirst('I', 'ı')), false);
+      expect(GstinValidator.isValid(gstin.replaceFirst('S', 'ſ')), false);
+    });
+
+    // Regression: the embedded PAN was not checked, so holder type 'D'
+    // was accepted.
+    test('rejects GSTINs whose embedded PAN is invalid', () {
+      expect(PanValidator.isValid('AAADU0939F'), false);
+      expect(GstinValidator.isValid(buildGstin('27', 'AAADU0939F')), false);
+    });
+
+    test('accepts GSTINs for every PAN holder type', () {
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      final random = Random(20261022);
+      String pick(String from) => from[random.nextInt(from.length)];
+      for (var i = 0; i < 1000; i++) {
+        for (final status in 'CPHFATBLJG'.split('')) {
+          final pan = '${pick(letters)}${pick(letters)}${pick(letters)}'
+              '$status${pick(letters)}'
+              '${random.nextInt(10000).toString().padLeft(4, '0')}'
+              '${pick(letters)}';
+          final gstin = buildGstin('27', pan);
+          expect(PanValidator.isValid(pan), true, reason: pan);
+          expect(GstinValidator.isValid(gstin), true, reason: gstin);
+          expect(GstinValidator.isValid(gstin.toLowerCase()), true,
+              reason: gstin);
+        }
+      }
     });
 
     test('Invalid GSTIN format', () {

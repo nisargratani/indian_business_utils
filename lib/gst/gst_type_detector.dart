@@ -14,6 +14,11 @@ class GstTypeDetector {
   /// For B2C sales, or when the place of supply differs from the buyer's
   /// registered state, use [fromStateCodes].
   ///
+  /// Supplies to an SEZ unit or developer, and exports, are inter-state
+  /// (Section 7(5) of the IGST Act) even when both parties are in the same
+  /// state. A GSTIN does not show this, so use [GstType.interState] directly
+  /// for them.
+  ///
   /// Throws an [ArgumentError] if either value does not start with a
   /// two-digit state code.
   static GstType detect({

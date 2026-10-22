@@ -1,6 +1,6 @@
 name: indian_business_utils
 description: Utilities for Indian ERP and accounting apps including GST calculation, validators, invoice helpers and financial utilities.
-version: 0.0.3
+version: 0.0.4
 homepage: https://github.com/nisargratani/indian_business_utils
 repository: https://github.com/nisargratani/indian_business_utils
 issue_tracker: https://github.com/nisargratani/indian_business_utils/issues
@@ -15,9 +15,10 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-  # Wide range on purpose: Flutter's flutter_localizations pins an exact intl
-  # version, so a narrow constraint makes this package uninstallable in
-  # localized Flutter apps.
+  # Wide range on purpose: flutter_localizations constrains intl (older
+  # Flutter releases pin an exact version, newer ones require ^0.20.3), so a
+  # narrow constraint makes this package uninstallable in localized Flutter
+  # apps. Widen the upper bound once intl 0.21 is released and tested.
   intl: '>=0.18.0 <0.21.0'
 
 dev_dependencies:

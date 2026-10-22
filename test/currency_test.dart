@@ -15,6 +15,60 @@ void main() {
       expect(IndianCurrencyFormatter.format(-1234.5), '-₹1,234.50');
     });
 
+    // Regression: format rounded the binary value (2.675 is stored as
+    // 2.67499…), so it disagreed with formatToWords on half-paisa amounts.
+    test('rounds half-up to paise like formatToWords', () {
+      expect(IndianCurrencyFormatter.format(1.005), '₹1.01');
+      expect(IndianCurrencyFormatter.format(2.675), '₹2.68');
+      expect(IndianCurrencyFormatter.format(4.015), '₹4.02');
+      expect(IndianCurrencyFormatter.format(-2.675), '-₹2.68');
+      expect(IndianCurrencyFormatter.format(1234567.891), '₹12,34,567.89');
+
+      // Every half-paisa amount from ₹0.005 to ₹999.995.
+      for (var paise = 0; paise < 100000; paise++) {
+        final amount = (paise * 10 + 5) / 1000;
+        expect(
+          IndianCurrencyFormatter.format(amount),
+          IndianCurrencyFormatter.format((paise + 1) / 100),
+          reason: '$amount',
+        );
+        expect(
+          IndianCurrencyFormatter.formatToWords(amount),
+          IndianCurrencyFormatter.formatToWords((paise + 1) / 100),
+          reason: '$amount',
+        );
+      }
+    });
+
+    // Regression: negative zero and tiny negatives printed '-₹0.00'.
+    test('does not print negative zero', () {
+      for (final amount in [-0.0, -0.001, -0.004]) {
+        expect(IndianCurrencyFormatter.format(amount), '₹0.00',
+            reason: '$amount');
+      }
+      expect(IndianCurrencyFormatter.format(-0.005), '-₹0.01');
+    });
+
+    // Regression: intl clamped values at or above 2^63 and printed
+    // 9,22,33,72,03,68,54,77,58,070.00 for 1e20.
+    test('rejects amounts it cannot print correctly', () {
+      for (final amount in [1e20, -1e20, 9.3e18, 9223372036854775808.0]) {
+        expect(
+          () => IndianCurrencyFormatter.format(amount),
+          throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'amount')),
+          reason: '$amount',
+        );
+      }
+      expect(
+        IndianCurrencyFormatter.format(9.2e18),
+        '₹92,00,00,00,00,00,00,00,000.00',
+      );
+      expect(
+        IndianCurrencyFormatter.format(12345678901234.567),
+        '₹1,23,45,67,89,01,234.57',
+      );
+    });
+
     test('is not affected by Intl.defaultLocale', () {
       final previous = Intl.defaultLocale;
       addTearDown(() => Intl.defaultLocale = previous);

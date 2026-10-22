@@ -17,23 +17,22 @@ void main() {
   print('18% is a current slab: '
       '${GstSlabHelper.isValidSlab(rate, on: DateTime.now())}');
 
-  // 3. Calculate the invoice.
-  final invoice = InvoiceCalculator.calculate(
-    subtotal: 5000,
-    discount: 200,
-    gstRate: rate,
-  );
-
-  // 4. Split the tax by transaction type.
+  // 3. Detect the transaction type. Use GstType.interState directly for
+  //    SEZ supplies and exports.
   final type = GstTypeDetector.detect(
     sellerGSTIN: sellerGstin,
     buyerGSTIN: buyerGstin,
   );
-  final gst = GstCalculator.splitGST(
-    amount: invoice.taxableAmount,
-    rate: rate,
+
+  // 4. Calculate the invoice. Passing the type makes the tax equal the
+  //    CGST + SGST (or IGST) printed below.
+  final invoice = InvoiceCalculator.calculate(
+    subtotal: 5000,
+    discount: 200,
+    gstRate: rate,
     type: type,
   );
+  final gst = invoice.gst!;
 
   // 5. Print it.
   final invoiceNo = InvoiceNumberGenerator.generate(sequence: 1);
