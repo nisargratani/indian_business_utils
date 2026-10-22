@@ -1,3 +1,34 @@
+## 0.0.4
+
+This release makes invoice tax match the printed CGST/SGST split, makes `IndianCurrencyFormatter.format` agree with `formatToWords`, and tightens the GSTIN and PAN validators. Some fixes change results for inputs that were previously handled incorrectly; see **Behaviour changes** before upgrading.
+
+### Fixed
+
+* **Intra-state invoice tax matches CGST + SGST.** `InvoiceCalculator.calculate` rounds the tax at the full rate, while `GstCalculator.splitGST` rounds CGST and SGST separately at half the rate, so about half of all intra-state invoices printed a taxable amount, CGST and SGST that did not add up to the total (for example `subtotal: 100.05` gave tax `18.01`, but CGST + SGST was `9.00 + 9.00`). Pass the new `type:` argument and the tax is CGST + SGST, calculated by `splitGST` itself. Without `type`, the result is unchanged.
+* `IndianCurrencyFormatter.format` rounds half-up to the nearest paisa, decimal-safe, like `formatToWords`. It rounded the binary value, so the same amount could show different paise in figures and in words: `2.675` printed `₹2.67` but read "Sixty Eight Paise".
+* `format` no longer prints `-₹0.00` for `-0.0` or for negative amounts that round to zero, such as `-0.004`.
+* `format` throws an `ArgumentError` for amounts of 2^63 or more instead of printing a different number: `1e20` printed `₹9,22,33,72,03,68,54,77,58,070.00`.
+* `GstinValidator.isValid` and `PanValidator.isValid` reject non-ASCII letters. Upper-casing turned `ı` (dotless i) into `I` and `ſ` (long s) into `S`, so values such as `ıBCPE1234F` were accepted.
+* `GstinValidator.isValid` checks the embedded PAN (characters 3–12) with `PanValidator`, so a GSTIN whose PAN has an invalid holder type, such as `D`, is rejected even when its check character is correct.
+* `InvoiceCalculator.calculate` reports a negative `subtotal` as an `ArgumentError` on `subtotal`. It was reported as a bad `discount` ("Must not exceed subtotal").
+
+### Behaviour changes
+
+* `IndianCurrencyFormatter.format` output changes for amounts exactly halfway between two paise whose binary value is just below the half: `1.005` gives `₹1.01` (was `₹1.00`), `2.675` gives `₹2.68` (was `₹2.67`). `-0.0` and tiny negatives give `₹0.00` (was `-₹0.00`).
+* `IndianCurrencyFormatter.format` throws an `ArgumentError` for a `double` whose absolute value is `IndianCurrencyFormatter.maxAmount` (2^63) or more. It returned wrong digits.
+* `GstinValidator.isValid` returns `false` for GSTINs with non-ASCII letters or with an embedded PAN that `PanValidator` rejects. `PanValidator.isValid` returns `false` for PANs with non-ASCII letters.
+* The `ArgumentError` for a negative `subtotal` in `InvoiceCalculator.calculate` names `subtotal` instead of `discount`.
+
+### Added
+
+* `InvoiceCalculator.calculate(type: …)`: with `GstType.intraState` the tax is CGST + SGST; with `GstType.interState` it is IGST. Without `type` the tax is rounded as IGST, as before.
+* `InvoiceResult.gst`, the CGST/SGST or IGST split, set when `type` is passed. It is included in `==`, `hashCode` and, when set, `toString`.
+* `IndianCurrencyFormatter.maxAmount`, the limit for `format`.
+
+### Other
+
+* Documentation: `GstTypeDetector.detect` and the README note that SEZ supplies and exports are inter-state whatever the GSTINs say. The GSTIN checksum is described as GSTN's Luhn mod-36 algorithm rather than ISO 7064. The `intl` constraint comment no longer says Flutter always pins an exact version.
+
 ## 0.0.3
 
 This release fixes calculation bugs and makes the package installable in more Flutter apps. Some fixes change results for inputs that were previously handled incorrectly; see **Behaviour changes** before upgrading.

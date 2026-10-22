@@ -10,6 +10,13 @@ class IndianCurrencyFormatter {
   /// Larger values cannot be represented to the paisa by a `double`.
   static const double maxAmountInWords = 1e13;
 
+  /// [format] accepts `double` amounts strictly below this absolute value
+  /// (2^63).
+  ///
+  /// `intl` limits the integer part to a 64-bit integer, so larger values
+  /// would print different digits.
+  static const double maxAmount = 9223372036854775808.0;
+
   // Creating a NumberFormat parses its pattern, so build it once and reuse it.
   // The locale is explicit, so the result never depends on Intl.defaultLocale.
   static final NumberFormat _currencyFormat = NumberFormat.currency(
@@ -19,11 +26,33 @@ class IndianCurrencyFormatter {
 
   /// Formats [amount] as Indian rupees with two decimal places.
   ///
+  /// The amount is rounded half-up to the nearest paisa, decimal-safe, so
+  /// it shows the same paise as [formatToWords]: `2.675` gives `₹2.68`.
+  ///
   /// ```dart
   /// IndianCurrencyFormatter.format(1234567.891); // ₹12,34,567.89
   /// IndianCurrencyFormatter.format(-1234.5);     // -₹1,234.50
   /// ```
-  static String format(num amount) => _currencyFormat.format(amount);
+  ///
+  /// Throws an [ArgumentError] if [amount] is a `double` whose absolute value
+  /// is not below [maxAmount].
+  static String format(num amount) {
+    // On the VM an int is exact and intl prints it correctly, but
+    // int.abs() overflows for the smallest int, so check doubles only.
+    if (amount is double && amount.isFinite && amount.abs() >= maxAmount) {
+      throw ArgumentError.value(
+        amount,
+        'amount',
+        'Absolute value must be less than $maxAmount',
+      );
+    }
+    // Round like formatToWords. Above its limit, roundHalfUp's 15-digit
+    // normalisation would drop digits a double still holds, so leave those
+    // values (and NaN and infinity) to intl.
+    final value =
+        amount.abs() < maxAmountInWords ? roundHalfUp(amount, 2) : amount;
+    return _currencyFormat.format(value);
+  }
 
   /// Converts [amount] to words in the Indian numbering system, as printed on
   /// invoices and cheques.

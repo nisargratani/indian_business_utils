@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:test/test.dart';
 import 'package:indian_business_utils/indian_business_utils.dart';
 
@@ -82,6 +84,75 @@ void main() {
       expect(split.total, invoice.tax);
     });
 
+    // Regression: the invoice tax was rounded at the full rate, so it could
+    // differ by a paisa from CGST + SGST, each rounded at half the rate.
+    test('intra-state tax equals CGST + SGST', () {
+      final small = InvoiceCalculator.calculate(
+        subtotal: 0.25,
+        gstRate: 18,
+        type: GstType.intraState,
+      );
+      expect(small.tax, 0.04);
+      expect(small.total, 0.29);
+      expect(small.gst, const GstSplitResult(cgst: 0.02, sgst: 0.02));
+
+      final odd = InvoiceCalculator.calculate(
+        subtotal: 100.05,
+        type: GstType.intraState,
+      );
+      expect(odd.tax, 18);
+      expect(odd.total, 118.05);
+      expect(odd.gst, const GstSplitResult(cgst: 9, sgst: 9));
+    });
+
+    test('intra-state tax matches splitGST for random subtotals', () {
+      int paise(double amount) => (amount * 100).round();
+      final random = Random(20261022);
+      for (var i = 0; i < 10000; i++) {
+        final subtotal = random.nextInt(100000000) / 100;
+        final invoice = InvoiceCalculator.calculate(
+          subtotal: subtotal,
+          type: GstType.intraState,
+        );
+        final gst = GstCalculator.splitGST(
+          amount: invoice.taxableAmount,
+          rate: 18,
+          type: GstType.intraState,
+        );
+        expect(invoice.gst, gst, reason: '$subtotal');
+        expect(invoice.tax, gst.total, reason: '$subtotal');
+        expect(
+          paise(invoice.total),
+          paise(invoice.taxableAmount) + paise(gst.cgst) + paise(gst.sgst),
+          reason: '$subtotal',
+        );
+      }
+    });
+
+    test('inter-state and default tax are rounded at the full rate', () {
+      final inter = InvoiceCalculator.calculate(
+        subtotal: 100.05,
+        type: GstType.interState,
+      );
+      expect(inter.tax, 18.01);
+      expect(inter.total, 118.06);
+      expect(inter.gst, const GstSplitResult(igst: 18.01));
+
+      final untyped = InvoiceCalculator.calculate(subtotal: 100.05);
+      expect(untyped.tax, 18.01);
+      expect(untyped.total, 118.06);
+      expect(untyped.gst, isNull);
+    });
+
+    // Regression: a negative subtotal was reported as a bad discount.
+    test('negative subtotal is not reported as a discount error', () {
+      try {
+        InvoiceCalculator.calculate(subtotal: -100);
+      } on ArgumentError catch (e) {
+        expect(e.name, 'subtotal');
+      }
+    });
+
     // Regression: invalid input silently produced negative totals.
     test('rejects invalid input', () {
       expect(
@@ -94,6 +165,10 @@ void main() {
       );
       expect(
         () => InvoiceCalculator.calculate(subtotal: 100, gstRate: -18),
+        throwsArgumentError,
+      );
+      expect(
+        () => InvoiceCalculator.calculate(subtotal: -100),
         throwsArgumentError,
       );
       expect(
@@ -134,6 +209,40 @@ void main() {
         // native (1000.0) and JavaScript (1000) platforms.
         'InvoiceResult(subtotal: ${1000.0}, discount: ${0.0}, '
         'taxableAmount: ${1000.0}, tax: ${180.0}, total: ${1180.0})',
+      );
+    });
+
+    test('equality, hashCode and toString include the GST split', () {
+      final intra = InvoiceCalculator.calculate(
+        subtotal: 1000,
+        type: GstType.intraState,
+      );
+      final inter = InvoiceCalculator.calculate(
+        subtotal: 1000,
+        type: GstType.interState,
+      );
+      expect(
+        intra,
+        const InvoiceResult(
+          subtotal: 1000,
+          discount: 0,
+          tax: 180,
+          total: 1180,
+          gst: GstSplitResult(cgst: 90, sgst: 90),
+        ),
+      );
+      expect(intra, isNot(inter));
+      expect(intra, isNot(InvoiceCalculator.calculate(subtotal: 1000)));
+      expect(
+        intra.hashCode,
+        InvoiceCalculator.calculate(subtotal: 1000, type: GstType.intraState)
+            .hashCode,
+      );
+      expect(
+        inter.toString(),
+        'InvoiceResult(subtotal: ${1000.0}, discount: ${0.0}, '
+        'taxableAmount: ${1000.0}, tax: ${180.0}, total: ${1180.0}, '
+        'gst: GstSplitResult(cgst: ${0.0}, sgst: ${0.0}, igst: ${180.0}))',
       );
     });
   });
