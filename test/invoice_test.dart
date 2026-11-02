@@ -153,6 +153,29 @@ void main() {
       }
     });
 
+    // Regression: 0.1 + 0.2 exceeds 0.3 by float noise, so a full discount
+    // built from parts was rejected.
+    test(
+        'IBU-06: a full discount that exceeds the subtotal only by float '
+        'noise is accepted', () {
+      final result =
+          InvoiceCalculator.calculate(subtotal: 0.3, discount: 0.1 + 0.2);
+      expect(result.taxableAmount, 0);
+      expect(result.tax, 0);
+      expect(result.total, 0);
+
+      // Both round to ₹100.00, but the raw difference rounds to -0.01.
+      final edge =
+          InvoiceCalculator.calculate(subtotal: 99.995, discount: 100.00499);
+      expect(edge.taxableAmount, 0);
+      expect(edge.total, 0);
+
+      expect(
+        () => InvoiceCalculator.calculate(subtotal: 100, discount: 100.01),
+        throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'discount')),
+      );
+    });
+
     // Regression: invalid input silently produced negative totals.
     test('rejects invalid input', () {
       expect(
@@ -191,6 +214,23 @@ void main() {
         total: 1062,
       );
       expect(result.taxableAmount, 900);
+    });
+
+    // Regression: the default taxableAmount was 0.19999999999999998, so the
+    // result was not equal to the calculated one.
+    test('IBU-07: default taxableAmount has no float noise', () {
+      const result = InvoiceResult(
+        subtotal: 0.3,
+        discount: 0.1,
+        tax: 0.04,
+        total: 0.24,
+      );
+      final calculated =
+          InvoiceCalculator.calculate(subtotal: 0.3, discount: 0.1);
+      expect(result.taxableAmount, 0.2);
+      expect(result, calculated);
+      expect(result.hashCode, calculated.hashCode);
+      expect(result.toString(), calculated.toString());
     });
 
     test('value equality and toString', () {
@@ -254,19 +294,31 @@ void main() {
     });
 
     test('generate with custom padding', () {
+      // 'INV/YYYY-YY/000001' is 18 characters, over the GST limit.
       final invoiceNum = InvoiceNumberGenerator.generate(
         sequence: 1,
         padding: 6,
+        enforceGstRules: false,
       );
       expect(invoiceNum, matches(RegExp(r'^INV/20[0-9]{2}-[0-9]{2}/000001$')));
+      expect(
+        () => InvoiceNumberGenerator.generate(sequence: 1, padding: 6),
+        throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'padding')),
+      );
+      expect(
+        InvoiceNumberGenerator.generate(
+            sequence: 1, prefix: 'I', padding: 6, date: DateTime(2025, 6, 1)),
+        'I/2025-26/000001',
+      );
     });
 
     test('generate with custom prefix', () {
       final invoiceNum = InvoiceNumberGenerator.generate(
         sequence: 45,
         prefix: 'BILL',
+        padding: 3,
       );
-      expect(invoiceNum.startsWith('BILL/'), isTrue);
+      expect(invoiceNum, matches(RegExp(r'^BILL/20[0-9]{2}-[0-9]{2}/045$')));
     });
 
     test('uses the current IST financial year by default', () {
@@ -297,7 +349,15 @@ void main() {
     test('sequence longer than padding is not truncated', () {
       expect(
         InvoiceNumberGenerator.generate(
-            sequence: 123456, date: DateTime(2025, 6, 1)),
+            sequence: 123456, prefix: 'I', date: DateTime(2025, 6, 1)),
+        'I/2025-26/123456',
+      );
+      expect(
+        InvoiceNumberGenerator.generate(
+          sequence: 123456,
+          date: DateTime(2025, 6, 1),
+          enforceGstRules: false,
+        ),
         'INV/2025-26/123456',
       );
     });
@@ -308,6 +368,54 @@ void main() {
         () => InvoiceNumberGenerator.generate(sequence: -3),
         throwsArgumentError,
       );
+    });
+
+    // Regression: generate returned numbers that its own isGstCompliant
+    // rejects; with the defaults, the 10,000th invoice of a year was 17
+    // characters long.
+    test('IBU-03: generate throws instead of breaking Rule 46(b)', () {
+      final date = DateTime(2026, 11, 2);
+      Matcher throwsFor(String name, String reason) => throwsA(
+            isA<ArgumentError>()
+                .having((e) => e.name, 'name', name)
+                .having((e) => '${e.message}', 'message', contains(reason)),
+          );
+
+      expect(
+        InvoiceNumberGenerator.generate(sequence: 9999, date: date),
+        'INV/2026-27/9999',
+      );
+      expect(
+        () => InvoiceNumberGenerator.generate(sequence: 10000, date: date),
+        throwsFor('sequence', '16 characters (Rule 46(b)'),
+      );
+      expect(
+        () => InvoiceNumberGenerator.generate(
+            sequence: 1, prefix: 'TAXINVOICE', date: date),
+        throwsFor('prefix', '16 characters (Rule 46(b)'),
+      );
+      expect(
+        () => InvoiceNumberGenerator.generate(
+            sequence: 1, padding: 6, date: date),
+        throwsFor('padding', '16 characters (Rule 46(b)'),
+      );
+      expect(
+        InvoiceNumberGenerator.generate(
+          sequence: 10000,
+          prefix: 'IN V',
+          date: date,
+          enforceGstRules: false,
+        ),
+        'IN V/2026-27/10000',
+      );
+      for (final prefix in ['IN V', 'INV#', 'INV_1', 'ÍNV']) {
+        expect(
+          () => InvoiceNumberGenerator.generate(
+              sequence: 1, prefix: prefix, date: date),
+          throwsFor('prefix', 'Rule 46(b)'),
+          reason: prefix,
+        );
+      }
     });
 
     test('isGstCompliant', () {

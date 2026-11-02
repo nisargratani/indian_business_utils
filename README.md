@@ -6,7 +6,7 @@ Pure-Dart helpers for Indian billing, accounting and ERP apps. Works in Flutter 
 | --- | --- |
 | GST calculation | `GstCalculator.splitGST` (CGST/SGST or IGST, half-up rounding to paise) |
 | GST type | `GstTypeDetector.detect`, `GstTypeDetector.fromStateCodes` |
-| GST slabs | `GstSlabHelper` (date-aware, covers the September 2025 rate rationalisation) |
+| GST slabs | `GstSlabHelper` (date-aware, covers the September 2025 rate rationalisation and special rates such as 12% on bricks) |
 | Validation | `GstinValidator` (format, state code, check digit), `PanValidator`, `HsnValidator` |
 | Invoices | `InvoiceCalculator.calculate`, `InvoiceNumberGenerator` |
 | Financial year | `FinancialYearHelper` (`2025-26` labels, start/end dates) |
@@ -103,7 +103,7 @@ Supplies to an SEZ unit or developer, and exports, are inter-state under Section
 
 ### GST slabs
 
-GST slabs changed on 22 September 2025 (12% and 28% removed, 40% added) and again on 1 February 2026 (tobacco and pan masala moved from 28% to 40%). Invoices for older supplies still use the old rates, so validation can be date-aware:
+GST slabs changed on 22 September 2025: 12% was removed as a standard slab (it still applies to bricks and tiles under Notification 14/2025-Central Tax (Rate)), 28% was removed (it applied to tobacco and pan masala until 31 January 2026), and 40% was added. On 1 February 2026 tobacco and pan masala moved from 28% to 40%. Invoices for older supplies still use the old rates, so validation can be date-aware:
 
 ```dart
 GstSlabHelper.currentSlabs;                             // [0, 5, 18, 40]
@@ -112,7 +112,19 @@ GstSlabHelper.isValidSlab(40, on: DateTime(2026, 4, 1)); // true
 GstSlabHelper.isValidSlab(12, on: DateTime(2026, 4, 1)); // false
 GstSlabHelper.isValidSlab(12);   // true: without a date, any slab ever in force
 GstSlabHelper.isValidRate(3);    // true: special rate (gold, silver)
+GstSlabHelper.isValidRate(12, on: DateTime(2026, 4, 1)); // true: bricks and tiles
 ```
+
+`isValidSlab` checks the standard slabs only. `isValidRate` also accepts the `specialRates`, which are not checked against a date:
+
+| Rate | Applies to |
+| --- | --- |
+| 0.1% | Supplies to merchant exporters (CGST 0.05% + SGST 0.05%, Notification 40/2017-CT(Rate); IGST 0.1%, Notification 41/2017-IT(Rate)) |
+| 0.25% | Rough precious and semi-precious stones |
+| 1.5% | Cut and polished diamonds |
+| 3% | Gold, silver and jewellery |
+| 6% | Bricks under the special composition scheme, without input tax credit |
+| 12% | Bricks and tiles (HSN 6815, 6901 00 10, 6904 10 00, 6905 10 00) under Notification 14/2025-CT(Rate) from 22 September 2025; the bricks composition scheme with input tax credit |
 
 ## Validators
 
@@ -148,19 +160,25 @@ final intra = InvoiceCalculator.calculate(
 
 `taxableAmount`, `tax` and `total` are rounded half-up to `precision` places (default `2`). With `type: GstType.intraState`, the tax is CGST + SGST, each rounded at half the rate as `splitGST` does; with `GstType.interState` or no `type`, it is rounded at the full rate. When `type` is passed, `invoice.gst` holds the split.
 
-An `ArgumentError` is thrown if the subtotal, discount or rate is negative, or if the discount exceeds the subtotal.
+An `ArgumentError` is thrown if the subtotal, discount or rate is negative, or if the discount exceeds the subtotal once both are rounded to `precision` places. A full discount built from parts, such as `0.1 + 0.2` against a subtotal of `0.3`, gives a taxable amount of `0.0`.
 
 ```dart
 InvoiceNumberGenerator.generate(sequence: 42, date: DateTime(2025, 6, 1));
 // 'INV/2025-26/0042'
 InvoiceNumberGenerator.generate(sequence: 7, prefix: 'BILL', padding: 3);
 // 'BILL/<current FY>/007'
+InvoiceNumberGenerator.generate(sequence: 10000, date: DateTime(2025, 6, 1));
+// throws ArgumentError: 'INV/2025-26/10000' is 17 characters
+InvoiceNumberGenerator.generate(sequence: 10000, prefix: 'I', date: DateTime(2025, 6, 1));
+// 'I/2025-26/10000'
 
 InvoiceNumberGenerator.isGstCompliant('INV/2025-26/0001');   // true
 InvoiceNumberGenerator.isGstCompliant('INV/2025-26/000001'); // false: over 16 characters
 ```
 
-The generator formats numbers but does not track them. Store the last issued sequence per financial year in your database. GST requires invoice numbers of at most 16 characters, using only letters, digits, `-` and `/`, so check a custom prefix or padding with `isGstCompliant`.
+The generator formats numbers but does not track them. Store the last issued sequence per financial year in your database.
+
+GST invoice numbers may have at most 16 characters, using only letters, digits, `-` and `/` (Rule 46(b) of the CGST Rules, 2017), and the e-invoice IRP rejects longer document numbers. `generate` never returns a number that breaks this rule: it throws an `ArgumentError` naming `prefix`, `padding` or `sequence`. The default format `INV/YYYY-YY/NNNN` has room for at most **9,999 invoices per financial year**; with a one-letter prefix such as `I` there is room for 999,999. Pass `enforceGstRules: false` for documents that are not GST invoices.
 
 ## Financial year
 
@@ -189,7 +207,7 @@ IndianCurrencyFormatter.formatToWords(-25);    // 'Minus Twenty Five Only'
 
 Both methods round half-up to the nearest paisa first, decimal-safe, so they always show the same paise: `format(2.675)` is `'₹2.68'` and `formatToWords(2.675)` ends in `'Sixty Eight Paise Only'`.
 
-`format` throws an `ArgumentError` for `double` amounts of `IndianCurrencyFormatter.maxAmount` (2^63, about 9.2e18) or more, which `intl` cannot print correctly. `formatToWords` throws an `ArgumentError` for NaN, infinity, or amounts of 10,00,000 crore (`IndianCurrencyFormatter.maxAmountInWords`, `1e13`) or more. Neither method reads or changes `Intl.defaultLocale`.
+`format` throws an `ArgumentError` for NaN, infinity, and `double` amounts of `IndianCurrencyFormatter.maxAmount` (2^63, about 9.2e18) or more, which `intl` cannot print correctly. `int` amounts are printed exactly. `formatToWords` throws an `ArgumentError` for NaN, infinity, or amounts of 10,00,000 crore (`IndianCurrencyFormatter.maxAmountInWords`, `1e13`) or more. Neither method reads or changes `Intl.defaultLocale`.
 
 ## Notes
 

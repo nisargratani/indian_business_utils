@@ -39,8 +39,11 @@ class InvoiceCalculator {
   /// ```
   ///
   /// Throws an [ArgumentError] if any value is not finite, [subtotal],
-  /// [gstRate] or [discount] is negative, or [discount] exceeds [subtotal].
-  /// Throws a [RangeError] if [precision] is outside `0..10`.
+  /// [gstRate] or [discount] is negative, or [discount] exceeds [subtotal]
+  /// once both are rounded to [precision] places. A discount that differs
+  /// from the subtotal only by floating point noise, such as
+  /// `0.1 + 0.2` against `0.3`, gives a zero taxable amount. Throws a
+  /// [RangeError] if [precision] is outside `0..10`.
   static InvoiceResult calculate({
     required num subtotal,
     num discount = 0,
@@ -61,7 +64,9 @@ class InvoiceCalculator {
     if (discount < 0) {
       throw ArgumentError.value(discount, 'discount', 'Must not be negative');
     }
-    if (discount > subtotal) {
+    // Compare at the invoice's precision, so float noise such as
+    // 0.1 + 0.2 == 0.30000000000000004 does not reject a full discount.
+    if (roundHalfUp(discount, precision) > roundHalfUp(subtotal, precision)) {
       throw ArgumentError.value(
         discount,
         'discount',
@@ -69,7 +74,11 @@ class InvoiceCalculator {
       );
     }
 
-    final taxable = roundHalfUp(subtotal - discount, precision);
+    // The rounded discount does not exceed the rounded subtotal, but the raw
+    // difference can still round to one unit below zero (for example
+    // 99.995 - 100.00499), so clamp it.
+    final difference = roundHalfUp(subtotal - discount, precision);
+    final taxable = difference < 0 ? 0.0 : difference;
     // Use splitGST itself, so the invoice tax and the printed split can
     // never drift apart.
     final gst = type == null

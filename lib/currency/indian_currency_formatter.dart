@@ -34,12 +34,15 @@ class IndianCurrencyFormatter {
   /// IndianCurrencyFormatter.format(-1234.5);     // -₹1,234.50
   /// ```
   ///
-  /// Throws an [ArgumentError] if [amount] is a `double` whose absolute value
-  /// is not below [maxAmount].
+  /// Throws an [ArgumentError] if [amount] is NaN, infinite, or a `double`
+  /// whose absolute value is not below [maxAmount].
   static String format(num amount) {
-    // On the VM an int is exact and intl prints it correctly, but
-    // int.abs() overflows for the smallest int, so check doubles only.
-    if (amount is double && amount.isFinite && amount.abs() >= maxAmount) {
+    checkFinite(amount, 'amount');
+    // On the VM an int is exact, needs no rounding and intl prints it
+    // correctly, but int.abs() overflows for the smallest int, so only
+    // doubles are checked and rounded. On the web every number is a double.
+    if (amount is! double) return _currencyFormat.format(amount);
+    if (amount.abs() >= maxAmount) {
       throw ArgumentError.value(
         amount,
         'amount',
@@ -48,7 +51,7 @@ class IndianCurrencyFormatter {
     }
     // Round like formatToWords. Above its limit, roundHalfUp's 15-digit
     // normalisation would drop digits a double still holds, so leave those
-    // values (and NaN and infinity) to intl.
+    // values to intl.
     final value =
         amount.abs() < maxAmountInWords ? roundHalfUp(amount, 2) : amount;
     return _currencyFormat.format(value);
