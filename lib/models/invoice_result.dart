@@ -1,3 +1,4 @@
+import '../src/numeric.dart';
 import 'gst_split_result.dart';
 
 /// Result of an invoice calculation.
@@ -9,7 +10,11 @@ class InvoiceResult {
   final double discount;
 
   /// Amount GST is charged on: `subtotal - discount`.
-  final double taxableAmount;
+  ///
+  /// When it is not passed to the constructor, it is computed without
+  /// floating point noise: `subtotal: 0.3, discount: 0.1` gives `0.2`.
+  double get taxableAmount => _taxableAmount ?? normalize(subtotal - discount);
+  final double? _taxableAmount;
 
   /// GST charged on [taxableAmount].
   final double tax;
@@ -23,7 +28,7 @@ class InvoiceResult {
   /// null otherwise.
   final GstSplitResult? gst;
 
-  /// Creates a result. If [taxableAmount] is omitted it is computed as
+  /// Creates a result. If `taxableAmount` is omitted it is computed as
   /// `subtotal - discount`.
   const InvoiceResult({
     required this.subtotal,
@@ -32,7 +37,7 @@ class InvoiceResult {
     required this.total,
     double? taxableAmount,
     this.gst,
-  }) : taxableAmount = taxableAmount ?? subtotal - discount;
+  }) : _taxableAmount = taxableAmount;
 
   @override
   bool operator ==(Object other) =>

@@ -22,24 +22,68 @@ class InvoiceNumberGenerator {
   /// ```
   ///
   /// This does not track sequences. Persist the last issued sequence per
-  /// financial year yourself, and check the result with [isGstCompliant] if
-  /// you use a longer prefix or padding.
+  /// financial year yourself.
   ///
-  /// Throws an [ArgumentError] if [sequence] is negative.
+  /// GST invoice numbers may have at most [maxGstLength] characters, using
+  /// only letters, digits, `-` and `/` (Rule 46(b) of the CGST Rules, 2017),
+  /// and the e-invoice IRP rejects longer document numbers. The default
+  /// format `INV/YYYY-YY/NNNN` uses 12 of the 16 characters before the
+  /// sequence, so it has room for at most 9,999 invoices per financial year.
+  /// Use a shorter [prefix] for more.
+  ///
+  /// By default, [generate] never returns a number that [isGstCompliant]
+  /// rejects: it throws an [ArgumentError] naming [prefix] if the prefix has
+  /// other characters or leaves no room for the sequence, [padding] if the
+  /// padded sequence does not fit, or [sequence] if the sequence has too
+  /// many digits. Pass `enforceGstRules: false` for documents that are not
+  /// GST invoices.
+  ///
+  /// Also throws an [ArgumentError] if [sequence] is negative.
   static String generate({
     required int sequence,
     String prefix = 'INV',
     int padding = 4,
     DateTime? date,
+    bool enforceGstRules = true,
   }) {
     if (sequence < 0) {
       throw ArgumentError.value(sequence, 'sequence', 'Must not be negative');
     }
+    if (enforceGstRules &&
+        prefix.isNotEmpty &&
+        !_gstAllowedChars.hasMatch(prefix)) {
+      throw ArgumentError.value(
+        prefix,
+        'prefix',
+        'May contain only letters, digits, "-" and "/" (Rule 46(b), CGST '
+            'Rules 2017)',
+      );
+    }
     final fy = date == null
         ? FinancialYearHelper.currentFY()
         : FinancialYearHelper.getFY(date);
+    final number = '$prefix/$fy/${sequence.toString().padLeft(padding, '0')}';
+    if (!enforceGstRules || number.length <= maxGstLength) return number;
 
-    return '$prefix/$fy/${sequence.toString().padLeft(padding, '0')}';
+    // Characters left for the sequence after "<prefix>/<fy>/".
+    final room = maxGstLength - prefix.length - fy.length - 2;
+    final limit = 'GST invoice numbers may have at most $maxGstLength '
+        'characters (Rule 46(b), CGST Rules 2017), but this gives "$number" '
+        '(${number.length} characters)';
+    if (room < 1) {
+      throw ArgumentError.value(
+          prefix, 'prefix', '$limit. Use a shorter prefix');
+    }
+    if (padding > room) {
+      throw ArgumentError.value(
+          padding, 'padding', '$limit. At most $room digits fit');
+    }
+    throw ArgumentError.value(
+      sequence,
+      'sequence',
+      '$limit. At most ${'9' * room} fits with prefix "$prefix"; use a '
+          'shorter prefix or a new series',
+    );
   }
 
   /// Returns true if [invoiceNumber] satisfies the GST invoice number rules:

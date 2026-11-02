@@ -1,3 +1,33 @@
+## 0.1.0
+
+This release fixes seven issues found by an external QA pass of 0.0.4. Several fixes make calls that used to return a value throw an `ArgumentError`, or change `isValidRate` results, so the version moves to 0.1.0; see **Behaviour changes** before upgrading.
+
+### Fixed
+
+* **`GstSlabHelper.isValidRate` accepts 12% and 6% for bricks and tiles.** Notification 14/2025-Central Tax (Rate), in force from 22 September 2025, levies central tax of 6% (12% GST) on fly ash bricks, aggregates and blocks (6815), bricks of fossil meals (6901 00 10), building bricks (6904 10 00) and earthen or roofing tiles (6905 10 00), and the bricks special composition scheme continues at 6% without input tax credit and 12% with it. `isValidRate(12, on: DateTime(2026, 11, 2))` returned `false`. 12% is still not a standard slab: `isValidSlab(12, on: …)` stays `false` from 22 September 2025, and `currentSlabs` stays `[0, 5, 18, 40]`.
+* **`isValidRate` accepts 0.1%**, the concessional rate on supplies to merchant exporters (CGST 0.05% + SGST 0.05% under Notification 40/2017-Central Tax (Rate); IGST 0.1% under Notification 41/2017-Integrated Tax (Rate)).
+* **`InvoiceNumberGenerator.generate` no longer returns numbers that break Rule 46(b) of the CGST Rules, 2017** (at most 16 characters; only letters, digits, `-` and `/`). With the defaults, the 10,000th invoice of a financial year was `INV/2026-27/10000`, 17 characters, which the e-invoice IRP rejects. It now throws an `ArgumentError` naming `prefix`, `padding` or `sequence`.
+* `IndianCurrencyFormatter.format` throws an `ArgumentError` for NaN and infinity, as its documentation and `formatToWords` do. It printed `NaN` and `₹∞`.
+* `format` prints the smallest `int` exactly on the Dart VM: `-9223372036854775808` printed `…807.00`, because `int.abs()` overflowed and the value was rounded through a `double`.
+* `InvoiceCalculator.calculate` accepts a full discount that exceeds the subtotal only by floating point noise: `subtotal: 0.3, discount: 0.1 + 0.2` threw "Must not exceed subtotal" and now gives a taxable amount, tax and total of `0.0`. The taxable amount is never negative.
+* `InvoiceResult`'s default `taxableAmount` (when it is not passed to the constructor) no longer keeps floating point noise: `subtotal: 0.3, discount: 0.1` gave `0.19999999999999998` and now gives `0.2`, so the result equals the one from `InvoiceCalculator.calculate`.
+
+### Behaviour changes
+
+* `GstSlabHelper.specialRates` is `[0.1, 0.25, 1.5, 3, 6, 12]` (was `[0.25, 1.5, 3]`), so `isValidRate` returns `true` for 0.1, 6 and 12 on any date.
+* `InvoiceNumberGenerator.generate` throws an `ArgumentError` when the result would be longer than 16 characters or the prefix has characters other than letters, digits, `-` and `/`. The default format `INV/YYYY-YY/NNNN` has room for at most 9,999 invoices per financial year. Pass `enforceGstRules: false` to get the old behaviour.
+* `IndianCurrencyFormatter.format` throws an `ArgumentError` for NaN, infinity and negative infinity.
+* `InvoiceCalculator.calculate` compares the discount with the subtotal after rounding both to `precision` places, so a discount above the subtotal by less than half a unit of `precision` (half a paisa by default) gives a zero taxable amount instead of an `ArgumentError`. A discount of `100.01` on a subtotal of `100` still throws.
+* `InvoiceResult.taxableAmount` is a getter instead of a field. Reading it is unchanged, and the constructor is still `const`.
+
+### Added
+
+* `InvoiceNumberGenerator.generate(enforceGstRules: …)`, `true` by default, to turn off the Rule 46(b) check for documents that are not GST invoices.
+
+### Other
+
+* Documentation: the README and `GstSlabHelper` say that 12% was removed as a standard slab but still applies to bricks and tiles, and list every special rate with its notification. The README and `generate` documentation state the 9,999-invoice limit of the default format. The README lists NaN and infinity among the values `format` rejects.
+
 ## 0.0.4
 
 This release makes invoice tax match the printed CGST/SGST split, makes `IndianCurrencyFormatter.format` agree with `formatToWords`, and tightens the GSTIN and PAN validators. Some fixes change results for inputs that were previously handled incorrectly; see **Behaviour changes** before upgrading.

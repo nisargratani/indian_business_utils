@@ -69,6 +69,39 @@ void main() {
       );
     });
 
+    // Regression: NaN and infinity were printed as 'NaN' and '₹∞'.
+    test('IBU-04: format throws for NaN and infinity', () {
+      for (final amount in [
+        double.nan,
+        double.infinity,
+        double.negativeInfinity,
+      ]) {
+        expect(
+          () => IndianCurrencyFormatter.format(amount),
+          throwsA(isA<ArgumentError>().having((e) => e.name, 'name', 'amount')),
+          reason: '$amount',
+        );
+      }
+    });
+
+    // Regression: int.abs() overflowed for the smallest int, so it was
+    // rounded through a double and printed ...807 instead of ...808.
+    test(
+      'IBU-05: format prints the smallest and largest int exactly',
+      () {
+        const smallest = 1 << 63; // -2^63 on the VM.
+        expect(
+          IndianCurrencyFormatter.format(smallest),
+          '-₹92,23,37,20,36,85,47,75,808.00',
+        );
+        expect(
+          IndianCurrencyFormatter.format(smallest - 1), // 2^63 - 1
+          '₹92,23,37,20,36,85,47,75,807.00',
+        );
+      },
+      testOn: 'vm',
+    );
+
     test('is not affected by Intl.defaultLocale', () {
       final previous = Intl.defaultLocale;
       addTearDown(() => Intl.defaultLocale = previous);

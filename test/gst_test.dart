@@ -250,6 +250,32 @@ void main() {
       expect(GstSlabHelper.isValidSlab(3), isFalse);
     });
 
+    // Regression: 12% GST (central tax 6%) on bricks and tiles, notified by
+    // Notification 14/2025-CT(Rate) from 22 Sep 2025, and the 6% bricks
+    // composition rate were rejected because 12% is no longer a slab.
+    test(
+        'IBU-01: isValidRate accepts the 12% / 6% rates on bricks and tiles '
+        'after GST 2.0', () {
+      final today = DateTime(2026, 11, 2);
+      expect(GstSlabHelper.isValidRate(12, on: today), isTrue);
+      expect(GstSlabHelper.isValidRate(6, on: today), isTrue);
+      expect(
+        GstSlabHelper.isValidRate(12, on: GstSlabHelper.rationalisationDate),
+        isTrue,
+      );
+      // 12% is no longer a standard slab.
+      expect(GstSlabHelper.isValidSlab(12, on: today), isFalse);
+      expect(GstSlabHelper.currentSlabs, [0, 5, 18, 40]);
+    });
+
+    // Regression: the 0.1% rate on supplies to merchant exporters
+    // (Notifications 40/2017-CT(Rate) and 41/2017-IT(Rate)) was rejected.
+    test('IBU-02: isValidRate accepts the 0.1% merchant-exporter rate', () {
+      expect(GstSlabHelper.isValidRate(0.1, on: DateTime(2026, 11, 2)), isTrue);
+      expect(GstSlabHelper.isValidRate(0.1), isTrue);
+      expect(GstSlabHelper.isValidSlab(0.1), isFalse);
+    });
+
     test('deprecated slabs keeps its original value', () {
       // ignore: deprecated_member_use_from_same_package
       expect(GstSlabHelper.slabs, [0, 5, 12, 18, 28]);

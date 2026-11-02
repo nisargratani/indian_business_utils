@@ -1,6 +1,6 @@
 name: indian_business_utils
 description: Utilities for Indian ERP and accounting apps including GST calculation, validators, invoice helpers and financial utilities.
-version: 0.0.4
+version: 0.1.0
 homepage: https://github.com/nisargratani/indian_business_utils
 repository: https://github.com/nisargratani/indian_business_utils
 issue_tracker: https://github.com/nisargratani/indian_business_utils/issues
